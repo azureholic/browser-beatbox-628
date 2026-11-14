@@ -1,3 +1,5 @@
+export const TOTAL_STEPS = 16;
+
 export interface InstrumentTrack {
   id: string;
   name: string;
@@ -16,7 +18,7 @@ export const DEFAULT_DEMO_PATTERN: BeatboxPattern = {
   id: 'demo-four-on-the-floor',
   name: 'Synthetic Groove 01',
   bpm: 120,
-  stepCount: 16,
+  stepCount: TOTAL_STEPS,
   instruments: [
     { id: 'kick', name: 'Kick', steps: [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false] },
     { id: 'snare', name: 'Snare', steps: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false] },
