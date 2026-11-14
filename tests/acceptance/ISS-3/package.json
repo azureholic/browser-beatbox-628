@@ -1,0 +1,14 @@
+{
+  "name": "beatbox-acceptance-iss-3",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated Playwright acceptance tests for ISS-3: 16-step continuous looping sequencer (REQ-002)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.20.5"
+  }
+}
