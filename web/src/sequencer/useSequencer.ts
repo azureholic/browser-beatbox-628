@@ -10,10 +10,19 @@ export interface UseSequencerResult extends SequencerSnapshot {
 
 export function useSequencer(
   initialPattern: BeatboxPattern = DEFAULT_DEMO_PATTERN,
+  onStep?: (stepIndex: number, activeInstrumentIds: string[]) => void,
 ): UseSequencerResult {
+  const onStepRef = useRef(onStep);
+  onStepRef.current = onStep;
+
   const sequencerRef = useRef<Sequencer | null>(null);
   if (sequencerRef.current === null) {
-    sequencerRef.current = new Sequencer({ initialPattern });
+    sequencerRef.current = new Sequencer({
+      initialPattern,
+      onStep: (stepIndex, activeInstrumentIds) => {
+        onStepRef.current?.(stepIndex, activeInstrumentIds);
+      },
+    });
   }
   const sequencer = sequencerRef.current;
 

@@ -1,7 +1,22 @@
+import { useRef } from 'react';
+import { useAudioEngine } from './audio/index.ts';
+import { DEFAULT_DEMO_PATTERN } from './data/demoPattern.ts';
 import { useSequencer } from './sequencer/useSequencer.ts';
 
 function App() {
-  const { pattern, isPlaying, currentStep, play, stop, toggleStep } = useSequencer();
+  const playSoundRef = useRef<(soundName: string) => void>(() => {});
+  const { pattern, isPlaying, currentStep, play, stop, toggleStep } = useSequencer(
+    DEFAULT_DEMO_PATTERN,
+    (_stepIndex, activeInstrumentIds) => {
+      for (const instrumentId of activeInstrumentIds) {
+        playSoundRef.current(instrumentId);
+      }
+    },
+  );
+  const { isReady, play: playSound, resume: resumeAudio } = useAudioEngine(
+    pattern.instruments.map((instrument) => instrument.id),
+  );
+  playSoundRef.current = playSound;
 
   return (
     <main
@@ -9,6 +24,7 @@ function App() {
       data-testid="beatbox-app"
       data-playing={String(isPlaying)}
       data-current-step={String(currentStep)}
+      data-audio-ready={String(isReady)}
     >
       <header className="beatbox-header">
         <div>
@@ -22,7 +38,14 @@ function App() {
             type="button"
             className={`transport-button${isPlaying ? ' playing' : ''}`}
             data-testid="transport-play"
-            onClick={() => (isPlaying ? stop() : play())}
+            onClick={() => {
+              if (isPlaying) {
+                stop();
+              } else {
+                void resumeAudio();
+                play();
+              }
+            }}
           >
             {isPlaying ? 'Stop' : 'Play'}
           </button>
