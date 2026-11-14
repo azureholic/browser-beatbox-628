@@ -1,0 +1,13 @@
+[Bb]in/
+[Oo]bj/
+TestResults/
+src/Beatbox.Api/wwwroot/
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+*.user
+.vs/
+.idea/
+.vscode/
+image.tar
