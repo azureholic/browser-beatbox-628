@@ -32,4 +32,5 @@ cd web && npm install && npm run dev
 
 ```bash
 ./scripts/quality
+cd web && npm test
 ```
