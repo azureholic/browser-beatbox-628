@@ -17,3 +17,4 @@ Create a browser-based beatbox/drum machine with 16 beats and different sounds.
 - **Are there any accessibility requirements (keyboard navigation, ARIA labels, screen reader support)?**: no
 - **Is there a specific maximum file size for audio samples, or a preferred method to load them (bundled assets)?**: no
 - **Are there any specific sounds that are required (e.g. kick, snare, hi-hat, clap), or can any set be used?**: just pick a nice set
+- [001 - Improve Local NPM Installation Reliability](docs/features/001-npm-install-reliability.md)
