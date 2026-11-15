@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/sequencer.test.ts tests/audioEngine.test.ts tests/transportTempo.test.ts tests/stepFeedback.test.ts",
+    "clean": "node ./tools/npm-install.mjs --clean-only",
+    "install:deps": "node ./tools/npm-install.mjs",
+    "install:ci": "node ./tools/npm-install.mjs --ci",
+    "test": "node --test tests/sequencer.test.ts tests/audioEngine.test.ts tests/transportTempo.test.ts tests/stepFeedback.test.ts tests/npmInstall.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
