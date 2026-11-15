@@ -8,19 +8,37 @@ body { margin: 0; min-height: 100vh; }
 #root { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
 .beatbox-shell { background: #1a1d26; border: 1px solid #2c3140; border-radius: 12px; padding: 1.5rem; }
 .beatbox-header {
-  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
   margin-bottom: 1.5rem; border-bottom: 1px solid #2c3140; padding-bottom: 0.75rem;
 }
 .beatbox-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
 .beatbox-meta { font-size: 0.9rem; color: #9ca3af; }
+.controls-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .transport-controls { display: flex; align-items: center; gap: 0.5rem; }
 .transport-button {
-  appearance: none; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 0.9rem;
-  padding: 0.5rem 1.25rem; border-radius: 8px; border: 1px solid #8b5cf6;
-  background: #7c3aed; color: #ffffff; transition: background-color 0.15s ease, border-color 0.15s ease;
+  appearance: none; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 0.875rem;
+  padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #3f475e;
+  background: #282e3f; color: #f3f4f6; transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.transport-button:hover { background: #6d28d9; }
-.transport-button.playing { background: #dc2626; border-color: #f87171; }
+.transport-button:hover { background: #343c52; border-color: #6b7280; }
+.transport-button:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.transport-play.active { background: #7c3aed; border-color: #a78bfa; color: #ffffff; }
+.transport-pause.active { background: #d97706; border-color: #fbbf24; color: #ffffff; }
+.transport-stop.active { background: #374151; border-color: #6b7280; color: #ffffff; }
+.tempo-controls {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: #232836; border: 1px solid #343b4e; border-radius: 8px; padding: 0.375rem 0.75rem;
+}
+.tempo-label { font-size: 0.85rem; font-weight: 600; color: #d1d5db; }
+.tempo-slider { width: 96px; accent-color: #8b5cf6; cursor: pointer; }
+.tempo-slider:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.tempo-input {
+  width: 64px; font-family: inherit; font-size: 0.875rem; font-weight: 600; text-align: center;
+  padding: 0.25rem 0.375rem; border-radius: 6px; border: 1px solid #3f475e;
+  background: #161922; color: #f3f4f6;
+}
+.tempo-input:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; border-color: #8b5cf6; }
+.tempo-display { font-size: 0.85rem; font-weight: 600; color: #a78bfa; min-width: 64px; text-align: right; }
 .pattern-grid { display: flex; flex-direction: column; gap: 0.75rem; }
 .track-row { display: grid; grid-template-columns: 140px repeat(16, minmax(0, 1fr)); gap: 0.375rem; align-items: center; }
 .track-label { font-weight: 600; font-size: 0.9rem; color: #e5e7eb; }

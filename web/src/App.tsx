@@ -1,11 +1,23 @@
 import { useRef } from 'react';
 import { useAudioEngine } from './audio/index.ts';
+import { TransportControls } from './controls/TransportControls.tsx';
 import { DEFAULT_DEMO_PATTERN } from './data/demoPattern.ts';
 import { useSequencer } from './sequencer/useSequencer.ts';
 
 function App() {
   const playSoundRef = useRef<(soundName: string) => void>(() => {});
-  const { pattern, isPlaying, currentStep, play, stop, toggleStep } = useSequencer(
+  const {
+    pattern,
+    transportState,
+    isPlaying,
+    currentStep,
+    bpm,
+    play,
+    pause,
+    stop,
+    setBpm,
+    toggleStep,
+  } = useSequencer(
     DEFAULT_DEMO_PATTERN,
     (_stepIndex, activeInstrumentIds) => {
       for (const instrumentId of activeInstrumentIds) {
@@ -23,33 +35,31 @@ function App() {
       className="beatbox-shell"
       data-testid="beatbox-app"
       data-playing={String(isPlaying)}
+      data-transport-state={transportState}
       data-current-step={String(currentStep)}
+      data-bpm={String(bpm)}
       data-audio-ready={String(isReady)}
     >
       <header className="beatbox-header">
         <div>
           <h1>Browser Beatbox</h1>
           <span className="beatbox-meta">
-            {pattern.name} &middot; {pattern.bpm} BPM &middot; {pattern.instruments.length} tracks &times; {pattern.stepCount} steps
+            {pattern.name} &middot; {bpm} BPM &middot; {pattern.instruments.length} tracks &times; {pattern.stepCount} steps
           </span>
         </div>
-        <div className="transport-controls">
-          <button
-            type="button"
-            className={`transport-button${isPlaying ? ' playing' : ''}`}
-            data-testid="transport-play"
-            onClick={() => {
-              if (isPlaying) {
-                stop();
-              } else {
-                void resumeAudio();
-                play();
-              }
-            }}
-          >
-            {isPlaying ? 'Stop' : 'Play'}
-          </button>
-        </div>
+        <TransportControls
+          transportState={transportState}
+          bpm={bpm}
+          onPlay={() => {
+            if (transportState !== 'playing') {
+              void resumeAudio();
+            }
+            play();
+          }}
+          onPause={pause}
+          onStop={stop}
+          onBpmChange={setBpm}
+        />
       </header>
       <section className="pattern-grid" aria-label="Demo step pattern">
         {pattern.instruments.map((instrument) => (
