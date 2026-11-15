@@ -5,6 +5,8 @@ src/Beatbox.Api/wwwroot/
 node_modules/
 web/dist/
 web/.vite/
+web/.npm/
+web/.npm-cache/
 *.tsbuildinfo
 *.user
 .vs/
