@@ -866,6 +866,20 @@ function defaultRunCommand({ args, cwd, env, platform }) {
   });
 }
 
+function buildInstallEnv(baseEnv = {}) {
+  const installEnv = { ...baseEnv };
+  for (const key of Object.keys(installEnv)) {
+    const lower = key.toLowerCase();
+    if (lower === 'npm_config_production' || lower === 'npm_config_omit') {
+      delete installEnv[key];
+    }
+  }
+  if (installEnv.NODE_ENV === 'production') {
+    installEnv.NODE_ENV = 'development';
+  }
+  return installEnv;
+}
+
 /**
  * Runs a platform-safe cleanup followed by `npm install` (or `npm ci`), respecting existing
  * `.npmrc` and `NPM_CONFIG_REGISTRY` settings and retrying at most once against
@@ -878,7 +892,7 @@ export async function runNpmInstallWithFallback(options = {}) {
     cleanBeforeInstall = true,
     cleanOnly = false,
     verifyDeps = true,
-    extraArgs = ['--no-audit', '--no-fund'],
+    extraArgs = ['--include=dev', '--no-audit', '--no-fund'],
     platform = process.platform,
     env = process.env,
     fsImpl = fsPromises,
@@ -920,12 +934,13 @@ export async function runNpmInstallWithFallback(options = {}) {
 
   const subcommand = ci ? 'ci' : 'install';
   const primaryArgs = [subcommand, ...extraArgs];
+  const installEnv = buildInstallEnv(env);
 
   // Primary attempt respects .npmrc, NPM_CONFIG_REGISTRY, and CI environment variables as-is.
   const primaryResult = await runCommand({
     args: primaryArgs,
     cwd: resolvedProjectDir,
-    env: { ...env },
+    env: installEnv,
     platform,
     attempt: 1,
     isFallback: false,
@@ -1008,7 +1023,7 @@ export async function runNpmInstallWithFallback(options = {}) {
   });
 
   const fallbackEnv = {
-    ...env,
+    ...installEnv,
     NPM_CONFIG_REGISTRY: PUBLIC_NPM_REGISTRY,
     npm_config_registry: PUBLIC_NPM_REGISTRY,
     [FALLBACK_GUARD_ENV]: '1',

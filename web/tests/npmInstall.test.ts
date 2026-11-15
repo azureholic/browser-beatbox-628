@@ -535,3 +535,98 @@ describe('NPM Install Robustness — Sanitization, Config & Build Dependency Che
     assert.doesNotMatch(npmrcContent, /^\s*registry\s*=/m);
   });
 });
+
+describe('MSBuild BuildWebFrontend & DevDependencies Build Resilience (Issue #28)', () => {
+  it('enforces --include=dev and neutralizes production omit env vars during primary and fallback installs', async () => {
+    const invocations: CommandInvocation[] = [];
+    const { logger } = createMemoryLogger();
+
+    const result = await runNpmInstallWithFallback({
+      projectDir: '/tmp/synthetic-web-prod',
+      ci: true,
+      cleanBeforeInstall: false,
+      verifyDeps: false,
+      env: {
+        NODE_ENV: 'production',
+        npm_config_production: 'true',
+        NPM_CONFIG_PRODUCTION: 'true',
+        npm_config_omit: 'dev',
+        NPM_CONFIG_OMIT: 'dev',
+        NPM_CONFIG_REGISTRY: 'https://registry.example.test/npm/',
+      },
+      logger,
+      runCommand: async (inv) => {
+        invocations.push(inv);
+        if (inv.attempt === 1) {
+          return {
+            exitCode: 1,
+            stdout: '',
+            stderr: 'npm ERR! code ETIMEDOUT\nnpm ERR! network connect ETIMEDOUT',
+            error: null,
+          };
+        }
+        return {
+          exitCode: 0,
+          stdout: 'added 25 packages',
+          stderr: '',
+          error: null,
+        };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(invocations.length, 2);
+
+    for (const inv of invocations) {
+      assert.equal(inv.args[0], 'ci');
+      assert.equal(inv.args.includes('--include=dev'), true);
+      assert.equal(inv.env.NODE_ENV, 'development');
+      assert.equal('npm_config_production' in inv.env, false);
+      assert.equal('NPM_CONFIG_PRODUCTION' in inv.env, false);
+      assert.equal('npm_config_omit' in inv.env, false);
+      assert.equal('NPM_CONFIG_OMIT' in inv.env, false);
+    }
+  });
+
+  it('configures BuildWebFrontend and package.json build scripts to self-heal partial node_modules and execute workspace CLIs', async () => {
+    const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const repoRoot = path.resolve(webRoot, '..');
+    const csprojPath = path.join(repoRoot, 'src', 'Beatbox.Api', 'Beatbox.Api.csproj');
+    const pkgJsonPath = path.join(webRoot, 'package.json');
+
+    const decoder = new TextDecoder();
+    const csprojContent = decoder.decode(readFileSync(csprojPath));
+    assert.match(csprojContent, /Name="BuildWebFrontend"/);
+    assert.match(csprojContent, /package-lock\.json/);
+    assert.match(csprojContent, /node_modules\\typescript\\bin\\tsc/);
+    assert.match(csprojContent, /node_modules\\vite\\bin\\vite\.js/);
+    assert.match(csprojContent, /node_modules\\@types\\react\\package\.json/);
+    assert.match(csprojContent, /node_modules\\@types\\react-dom\\package\.json/);
+    assert.match(csprojContent, /Command="node \.\/tools\/npm-install\.mjs --ci"/);
+    assert.match(csprojContent, /Command="npm run build"\s+StandardErrorImportance="High"/);
+
+    const pkgJson = JSON.parse(decoder.decode(readFileSync(pkgJsonPath))) as {
+      scripts: Record<string, string>;
+    };
+    assert.equal(
+      pkgJson.scripts.build,
+      'node ./node_modules/typescript/bin/tsc --noEmit && node ./node_modules/vite/bin/vite.js build',
+    );
+    assert.equal(pkgJson.scripts.typecheck, 'node ./node_modules/typescript/bin/tsc --noEmit');
+
+    const verification = await verifyBuildDependencies(webRoot, {
+      requiredPackages: [
+        'vite',
+        'typescript',
+        '@vitejs/plugin-react',
+        '@types/react',
+        '@types/react-dom',
+        'react',
+        'react-dom',
+      ],
+    });
+    assert.equal(verification.valid, true, `Missing build packages: ${verification.missing.join(', ')}`);
+    assert.equal(existsSync(path.join(webRoot, 'node_modules', 'typescript', 'bin', 'tsc')), true);
+    assert.equal(existsSync(path.join(webRoot, 'node_modules', 'vite', 'bin', 'vite.js')), true);
+  });
+});
