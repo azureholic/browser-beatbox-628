@@ -25,7 +25,8 @@ dotnet run --project src/Beatbox.Api
 dotnet run --project src/Beatbox.Api
 
 # Terminal 2: Vite HMR server on http://localhost:5173 (proxies /healthz and /health)
-cd web && npm install && npm run dev
+# (`npm run install:deps` safely cleans stale Windows artifacts and falls back to https://registry.npmjs.org/ on transient registry errors)
+cd web && npm run install:deps && npm run dev
 ```
 
 ## Quality Gate
