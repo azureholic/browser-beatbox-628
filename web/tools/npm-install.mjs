@@ -759,38 +759,37 @@ export async function verifyBuildDependencies(projectDir = DEFAULT_PROJECT_DIR, 
   };
 }
 
-function resolveNpmInvocation(npmArgs, env, platform) {
-  const npmExecPath = env?.npm_execpath;
-  if (typeof npmExecPath === 'string' && npmExecPath.endsWith('.js') && fsSync.existsSync(npmExecPath)) {
-    return {
-      command: process.execPath,
-      args: [npmExecPath, ...npmArgs],
-      shell: false,
-    };
+const SAFE_NPM_ARG_PATTERN = /^[A-Za-z0-9._:/=@-]+$/;
+
+function assertSafeNpmArgs(npmArgs) {
+  for (const arg of npmArgs) {
+    if (typeof arg !== 'string' || arg.length === 0 || !SAFE_NPM_ARG_PATTERN.test(arg)) {
+      throw new Error(`Unsafe npm CLI argument rejected: ${sanitizeLogMessage(String(arg))}`);
+    }
   }
+}
+
+function spawnNpmProcess(npmArgs, { cwd, env, platform }) {
+  assertSafeNpmArgs(npmArgs);
+
+  const spawnOptions = {
+    cwd,
+    env,
+    shell: false,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  };
 
   if (platform === 'win32') {
     const adjacentNpmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
     if (fsSync.existsSync(adjacentNpmCli)) {
-      return {
-        command: process.execPath,
-        args: [adjacentNpmCli, ...npmArgs],
-        shell: false,
-      };
+      return spawn(process.execPath, [adjacentNpmCli, ...npmArgs], spawnOptions);
     }
 
-    return {
-      command: 'cmd.exe',
-      args: ['/d', '/s', '/c', 'npm', ...npmArgs],
-      shell: false,
-    };
+    return spawn('cmd.exe', ['/d', '/s', '/c', 'npm', ...npmArgs], spawnOptions);
   }
 
-  return {
-    command: 'npm',
-    args: npmArgs,
-    shell: false,
-  };
+  return spawn('npm', npmArgs, spawnOptions);
 }
 
 function readNpmDebugLogExcerpt(stderr) {
@@ -815,14 +814,19 @@ function readNpmDebugLogExcerpt(stderr) {
 
 function defaultRunCommand({ args, cwd, env, platform }) {
   return new Promise((resolve) => {
-    const invocation = resolveNpmInvocation(args, env, platform);
-    const child = spawn(invocation.command, invocation.args, {
-      cwd,
-      env,
-      shell: invocation.shell,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    let child;
+    try {
+      child = spawnNpmProcess(args, { cwd, env, platform });
+    } catch (err) {
+      resolve({
+        exitCode: 1,
+        stdout: '',
+        stderr: err instanceof Error ? err.message : String(err),
+        debugLog: '',
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      return;
+    }
 
     let stdout = '';
     let stderr = '';
