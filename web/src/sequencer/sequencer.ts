@@ -9,6 +9,11 @@ export { TOTAL_STEPS };
 
 export const STEPS_PER_BEAT = 4;
 export const MS_PER_MINUTE = 60_000;
+export const DEFAULT_BPM = 120;
+export const MIN_BPM = 40;
+export const MAX_BPM = 250;
+
+export type TransportState = 'stopped' | 'playing' | 'paused';
 
 export interface SequencerTimer {
   setInterval(callback: () => void, delayMs: number): unknown;
@@ -22,6 +27,7 @@ const defaultTimer: SequencerTimer = {
 };
 
 export interface SequencerSnapshot {
+  readonly transportState: TransportState;
   readonly isPlaying: boolean;
   readonly currentStep: number;
   readonly bpm: number;
@@ -35,6 +41,13 @@ export interface SequencerOptions {
   readonly stepCount?: number;
   readonly timer?: SequencerTimer;
   readonly onStep?: (stepIndex: number, activeInstrumentIds: string[]) => void;
+}
+
+export function clampBpm(bpm: number): number {
+  if (!Number.isFinite(bpm)) {
+    throw new RangeError('BPM must be a finite number.');
+  }
+  return Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(bpm)));
 }
 
 export function calculateStepIntervalMs(
@@ -70,8 +83,10 @@ export function normalizePattern(
   if (!Number.isInteger(stepCount) || stepCount <= 0) {
     throw new RangeError('Step count must be a positive integer.');
   }
+  const normalizedBpm = clampBpm(pattern.bpm);
   return {
     ...pattern,
+    bpm: normalizedBpm,
     stepCount,
     instruments: pattern.instruments.map((instrument) => ({
       ...instrument,
@@ -116,6 +131,7 @@ export class Sequencer {
   readonly #onStep?: (stepIndex: number, activeInstrumentIds: string[]) => void;
   readonly #listeners = new Set<() => void>();
   #intervalHandle: unknown = null;
+  #timerGeneration = 0;
   #snapshot: SequencerSnapshot;
 
   constructor(options: SequencerOptions = {}) {
@@ -127,6 +143,7 @@ export class Sequencer {
     this.#timer = options.timer ?? defaultTimer;
     this.#onStep = options.onStep;
     this.#snapshot = {
+      transportState: 'stopped',
       isPlaying: false,
       currentStep: 0,
       bpm: normalizedPattern.bpm,
@@ -134,6 +151,10 @@ export class Sequencer {
       stepIntervalMs,
       pattern: normalizedPattern,
     };
+  }
+
+  get transportState(): TransportState {
+    return this.#snapshot.transportState;
   }
 
   get currentStep(): number {
@@ -193,36 +214,122 @@ export class Sequencer {
   }
 
   play(): void {
-    if (this.#snapshot.isPlaying) {
+    if (this.#snapshot.transportState === 'playing') {
+      return;
+    }
+
+    const wasPaused = this.#snapshot.transportState === 'paused';
+    const startStep = wasPaused ? this.#snapshot.currentStep : 0;
+
+    this.#clearTimer();
+    this.#snapshot = {
+      ...this.#snapshot,
+      transportState: 'playing',
+      isPlaying: true,
+      currentStep: startStep,
+    };
+    this.#startTimer();
+    this.#notifyListeners();
+
+    if (!wasPaused && this.#snapshot.transportState === 'playing') {
+      this.#onStep?.(0, this.getActiveInstrumentIds(0));
+    }
+  }
+
+  pause(): void {
+    if (this.#snapshot.transportState !== 'playing') {
       return;
     }
 
     this.#clearTimer();
     this.#snapshot = {
       ...this.#snapshot,
-      isPlaying: true,
-      currentStep: 0,
+      transportState: 'paused',
+      isPlaying: false,
     };
-    this.#intervalHandle = this.#timer.setInterval(() => {
-      this.advanceStep();
-    }, this.#snapshot.stepIntervalMs);
-
     this.#notifyListeners();
-    this.#onStep?.(0, this.getActiveInstrumentIds(0));
   }
 
   stop(): void {
     this.#clearTimer();
-    if (!this.#snapshot.isPlaying && this.#snapshot.currentStep === 0) {
+    if (this.#snapshot.transportState === 'stopped' && this.#snapshot.currentStep === 0) {
       return;
     }
 
     this.#snapshot = {
       ...this.#snapshot,
+      transportState: 'stopped',
       isPlaying: false,
       currentStep: 0,
     };
     this.#notifyListeners();
+  }
+
+  seek(stepIndex: number): number {
+    if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= this.#snapshot.stepCount) {
+      throw new RangeError(
+        `Step index must be an integer in [0, ${this.#snapshot.stepCount - 1}].`,
+      );
+    }
+
+    if (this.#snapshot.transportState === 'playing') {
+      this.#clearTimer();
+      this.#snapshot = {
+        ...this.#snapshot,
+        currentStep: stepIndex,
+      };
+      this.#startTimer();
+      this.#notifyListeners();
+      if (this.#snapshot.transportState === 'playing') {
+        this.#onStep?.(stepIndex, this.getActiveInstrumentIds(stepIndex));
+      }
+      return stepIndex;
+    }
+
+    const nextTransportState: TransportState =
+      this.#snapshot.transportState === 'stopped' && stepIndex === 0 ? 'stopped' : 'paused';
+
+    if (
+      this.#snapshot.currentStep === stepIndex &&
+      this.#snapshot.transportState === nextTransportState
+    ) {
+      return stepIndex;
+    }
+
+    this.#snapshot = {
+      ...this.#snapshot,
+      transportState: nextTransportState,
+      isPlaying: false,
+      currentStep: stepIndex,
+    };
+    this.#notifyListeners();
+    return stepIndex;
+  }
+
+  setBpm(bpm: number): number {
+    const clampedBpm = clampBpm(bpm);
+    if (clampedBpm === this.#snapshot.bpm) {
+      return clampedBpm;
+    }
+
+    const nextStepIntervalMs = calculateStepIntervalMs(clampedBpm);
+    this.#snapshot = {
+      ...this.#snapshot,
+      bpm: clampedBpm,
+      stepIntervalMs: nextStepIntervalMs,
+      pattern: {
+        ...this.#snapshot.pattern,
+        bpm: clampedBpm,
+      },
+    };
+
+    if (this.#snapshot.transportState === 'playing') {
+      this.#clearTimer();
+      this.#startTimer();
+    }
+
+    this.#notifyListeners();
+    return clampedBpm;
   }
 
   advanceStep(): number {
@@ -261,10 +368,22 @@ export class Sequencer {
     };
   }
 
+  #startTimer(): void {
+    const generation = ++this.#timerGeneration;
+    this.#intervalHandle = this.#timer.setInterval(() => {
+      if (this.#snapshot.transportState !== 'playing' || this.#timerGeneration !== generation) {
+        return;
+      }
+      this.advanceStep();
+    }, this.#snapshot.stepIntervalMs);
+  }
+
   #clearTimer(): void {
+    this.#timerGeneration++;
     if (this.#intervalHandle !== null) {
-      this.#timer.clearInterval(this.#intervalHandle);
+      const handle = this.#intervalHandle;
       this.#intervalHandle = null;
+      this.#timer.clearInterval(handle);
     }
   }
 

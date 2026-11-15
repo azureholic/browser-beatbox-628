@@ -3,7 +3,11 @@ import { describe, it } from 'node:test';
 import { DEFAULT_DEMO_PATTERN } from '../src/data/demoPattern.ts';
 import {
   calculateStepIntervalMs,
+  clampBpm,
+  DEFAULT_BPM,
   getNextStepIndex,
+  MAX_BPM,
+  MIN_BPM,
   Sequencer,
   TOTAL_STEPS,
   type SequencerTimer,
@@ -242,5 +246,129 @@ describe('16-step Sequencer (REQ-002)', () => {
     assert.throws(() => sequencer.toggleStep('kick', -1), RangeError);
     assert.throws(() => sequencer.toggleStep('kick', TOTAL_STEPS), RangeError);
     assert.throws(() => sequencer.toggleStep('unknown-drum', 0), RangeError);
+  });
+
+  it('transitions deterministically across stopped, playing, paused, and seek states without race conditions', () => {
+    const capturedCallbacks: Array<() => void> = [];
+    let activeTimers = 0;
+    const baseTimer = new ManualFakeTimer();
+    const customTimer: SequencerTimer = {
+      setInterval: (callback, delayMs) => {
+        activeTimers++;
+        capturedCallbacks.push(callback);
+        return baseTimer.setInterval(callback, delayMs);
+      },
+      clearInterval: (handle) => {
+        activeTimers = Math.max(0, activeTimers - 1);
+        baseTimer.clearInterval(handle);
+      },
+    };
+
+    const triggeredSteps: number[] = [];
+    const sequencer = new Sequencer({
+      timer: customTimer,
+      onStep: (stepIndex) => {
+        triggeredSteps.push(stepIndex);
+      },
+    });
+
+    assert.equal(sequencer.transportState, 'stopped');
+    assert.equal(sequencer.isPlaying, false);
+
+    // Pause and Stop from stopped are idempotent no-ops
+    sequencer.pause();
+    assert.equal(sequencer.transportState, 'stopped');
+    sequencer.stop();
+    assert.equal(sequencer.transportState, 'stopped');
+
+    // Play from stopped starts at step 0 and triggers step 0 immediately
+    sequencer.play();
+    assert.equal(sequencer.transportState, 'playing');
+    assert.equal(sequencer.isPlaying, true);
+    assert.equal(sequencer.currentStep, 0);
+    assert.deepEqual(triggeredSteps, [0]);
+
+    // Advance to step 5 (+40ms sub-interval) and pause
+    baseTimer.advanceBy(sequencer.stepIntervalMs * 5 + 40);
+    assert.equal(sequencer.currentStep, 5);
+
+    sequencer.pause();
+    assert.equal(sequencer.transportState, 'paused');
+    assert.equal(sequencer.isPlaying, false);
+    assert.equal(sequencer.currentStep, 5);
+    assert.equal(activeTimers, 0);
+
+    // Even if a stale queued timer callback fires after pause, generation guard ignores it
+    capturedCallbacks[0]?.();
+    assert.equal(sequencer.currentStep, 5);
+    assert.equal(sequencer.transportState, 'paused');
+
+    // Resume from paused step 5 does not reset to 0 or re-trigger step 5
+    triggeredSteps.length = 0;
+    sequencer.play();
+    assert.equal(sequencer.transportState, 'playing');
+    assert.equal(sequencer.isPlaying, true);
+    assert.equal(sequencer.currentStep, 5);
+    assert.deepEqual(triggeredSteps, []);
+
+    // Next full interval advances 5 -> 6
+    baseTimer.advanceBy(sequencer.stepIntervalMs);
+    assert.equal(sequencer.currentStep, 6);
+    assert.deepEqual(triggeredSteps, [6]);
+
+    // Pause at step 0 and verify Stop still transitions paused -> stopped
+    sequencer.seek(0);
+    sequencer.pause();
+    assert.equal(sequencer.transportState, 'paused');
+    assert.equal(sequencer.currentStep, 0);
+    sequencer.stop();
+    assert.equal(sequencer.transportState, 'stopped');
+    assert.equal(sequencer.currentStep, 0);
+
+    // Seek while stopped (> 0) positions playhead in paused state; invalid steps throw RangeError
+    sequencer.seek(10);
+    assert.equal(sequencer.transportState, 'paused');
+    assert.equal(sequencer.currentStep, 10);
+    assert.throws(() => sequencer.seek(-1), RangeError);
+    assert.throws(() => sequencer.seek(TOTAL_STEPS), RangeError);
+    assert.throws(() => sequencer.seek(2.5), RangeError);
+  });
+
+  it('clamps BPM to [40, 250] and reschedules step interval in real time while playing', () => {
+    assert.equal(DEFAULT_BPM, 120);
+    assert.equal(MIN_BPM, 40);
+    assert.equal(MAX_BPM, 250);
+    assert.equal(clampBpm(20), 40);
+    assert.equal(clampBpm(-15), 40);
+    assert.equal(clampBpm(120.4), 120);
+    assert.equal(clampBpm(120.6), 121);
+    assert.equal(clampBpm(360), 250);
+    assert.throws(() => clampBpm(Number.NaN), RangeError);
+    assert.throws(() => clampBpm(Number.POSITIVE_INFINITY), RangeError);
+
+    const timer = new ManualFakeTimer();
+    const sequencer = new Sequencer({ timer });
+    sequencer.play();
+
+    // Advance 2 steps at 120 BPM (125ms/step) + 50ms into step 2
+    timer.advanceBy(125 * 2 + 50);
+    assert.equal(sequencer.currentStep, 2);
+
+    // Setting identical BPM (120) does not disturb in-flight step timing (remaining 75ms reaches step 3)
+    assert.equal(sequencer.setBpm(120), 120);
+    timer.advanceBy(75);
+    assert.equal(sequencer.currentStep, 3);
+
+    // Increasing BPM to 200 (75ms/step) replaces active timer immediately without resetting step
+    assert.equal(sequencer.setBpm(200), 200);
+    assert.equal(sequencer.stepIntervalMs, 75);
+    assert.equal(sequencer.currentStep, 3);
+    assert.equal(sequencer.isPlaying, true);
+    assert.equal(timer.activeTimerCount, 1);
+
+    timer.advanceBy(50);
+    assert.equal(sequencer.currentStep, 3);
+    timer.advanceBy(25);
+    assert.equal(sequencer.currentStep, 4);
   });
 });

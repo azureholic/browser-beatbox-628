@@ -4,7 +4,10 @@ import { Sequencer, type SequencerSnapshot } from './sequencer.ts';
 
 export interface UseSequencerResult extends SequencerSnapshot {
   play: () => void;
+  pause: () => void;
   stop: () => void;
+  seek: (stepIndex: number) => number;
+  setBpm: (bpm: number) => number;
   toggleStep: (instrumentId: string, stepIndex: number) => boolean;
 }
 
@@ -40,7 +43,10 @@ export function useSequencer(
   return {
     ...snapshot,
     play: () => sequencer.play(),
+    pause: () => sequencer.pause(),
     stop: () => sequencer.stop(),
+    seek: (stepIndex) => sequencer.seek(stepIndex),
+    setBpm: (bpm) => sequencer.setBpm(bpm),
     toggleStep: (instrumentId, stepIndex) => sequencer.toggleStep(instrumentId, stepIndex),
   };
 }
