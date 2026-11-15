@@ -3,6 +3,7 @@ import { useAudioEngine } from './audio/index.ts';
 import { TransportControls } from './controls/TransportControls.tsx';
 import { DEFAULT_DEMO_PATTERN } from './data/demoPattern.ts';
 import { useSequencer } from './sequencer/useSequencer.ts';
+import { PatternGrid } from './stepper/PatternGrid.tsx';
 
 function App() {
   const playSoundRef = useRef<(soundName: string) => void>(() => {});
@@ -61,39 +62,13 @@ function App() {
           onBpmChange={setBpm}
         />
       </header>
-      <section className="pattern-grid" aria-label="Demo step pattern">
-        {pattern.instruments.map((instrument) => (
-          <div key={instrument.id} className="track-row" data-testid={`track-${instrument.id}`}>
-            <span className="track-label">{instrument.name}</span>
-            {instrument.steps.map((isActive, i) => {
-              const isCurrent = isPlaying && currentStep === i;
-              const cellClasses = [
-                'step-cell',
-                isActive ? 'active' : '',
-                isCurrent ? 'current' : '',
-              ]
-                .filter(Boolean)
-                .join(' ');
-
-              return (
-                <button
-                  key={`${instrument.id}-${i}`}
-                  type="button"
-                  className={cellClasses}
-                  data-testid={`step-${instrument.id}-${i}`}
-                  data-active={String(isActive)}
-                  data-current={String(isCurrent)}
-                  aria-pressed={isActive}
-                  aria-label={`${instrument.name} step ${i + 1}`}
-                  onClick={() => toggleStep(instrument.id, i)}
-                >
-                  {i + 1}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </section>
+      <PatternGrid
+        instruments={pattern.instruments}
+        stepCount={pattern.stepCount}
+        currentStep={currentStep}
+        isPlaying={isPlaying}
+        onToggleStep={toggleStep}
+      />
     </main>
   );
 }
